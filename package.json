@@ -1,0 +1,34 @@
+{
+  "name": "comiclingo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:seed": "node --experimental-strip-types prisma/seed.ts"
+  },
+  "dependencies": {
+    "next": "^15.5.10",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ajv": "^8.17.1",
+    "lucide-react": "^0.468.0",
+    "tailwindcss": "^4.1.0",
+    "@tailwindcss/postcss": "^4.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "vitest": "^3.2.0",
+    "@playwright/test": "^1.56.0",
+    "prisma": "^6.19.0"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

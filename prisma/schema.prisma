@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid())
+  authSubject String? @unique
+  nickname String
+  balance Int @default(0)
+  minorMode Boolean @default(true)
+  leaderboardEnabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  profile LearnerProfile?
+  pet Pet?
+  projects ComicProject[]
+  sessions QuizSession[]
+  mastery MasteryRecord[]
+  reviews ReviewSchedule[]
+  ledger PointsLedger[]
+  inventory Inventory[]
+  leaderboard LeaderboardEntry[]
+  moderation ContentModerationLog[]
+}
+model LearnerProfile {
+  id String @id @default(uuid())
+  userId String @unique
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  targetExam String
+  targetScore Float
+  dailyMinutes Int @default(10)
+  interests String[]
+}
+model DifficultyLevel {
+  id String @id
+  cefr String
+  examAliases String[]
+  targetCount Int
+  maxSentenceWords Int
+  grammarComplexity Int
+  newWordDensity Float
+  dialogueTurns Int
+  chineseRatio Float
+  config Json
+  projects ComicProject[]
+}
+model ComicProject {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  difficultyId String
+  difficulty DifficultyLevel @relation(fields:[difficultyId],references:[id])
+  title String
+  genre String
+  style String
+  idea String
+  status String @default("pending")
+  cacheKey String
+  characters Json
+  goals Json
+  readCompleted Boolean @default(false)
+  createdAt DateTime @default(now())
+  panels ComicPanel[]
+  knowledge KnowledgePoint[]
+  sessions QuizSession[]
+  @@index([userId,cacheKey])
+}
+model ComicPanel {
+  id String @id @default(uuid())
+  projectId String
+  project ComicProject @relation(fields:[projectId],references:[id],onDelete:Cascade)
+  position Int
+  description String
+  englishDialogue String
+  chineseHint String
+  targetIds String[]
+  imageUrl String?
+  imageStatus String @default("placeholder")
+  @@unique([projectId,position])
+}
+model KnowledgePoint {
+  id String @id @default(uuid())
+  projectId String
+  project ComicProject @relation(fields:[projectId],references:[id],onDelete:Cascade)
+  canonicalKey String
+  kind String
+  text String
+  meaning String
+  ipa String
+  example String
+  contextExample String
+  collocations String[]
+  questions QuizItem[]
+}
+model QuizSession {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  projectId String
+  project ComicProject @relation(fields:[projectId],references:[id],onDelete:Cascade)
+  currentKnowledgeIndex Int @default(0)
+  currentStage Int @default(3)
+  revision Int @default(0)
+  completed Boolean @default(false)
+  state Json
+  createdAt DateTime @default(now())
+}
+model QuizItem {
+  id String @id @default(uuid())
+  knowledgeId String
+  knowledge KnowledgePoint @relation(fields:[knowledgeId],references:[id],onDelete:Cascade)
+  stage Int
+  type String
+  prompt String
+  options Json
+  answer String
+  rubric Json?
+  @@unique([knowledgeId,stage])
+}
+model MasteryRecord {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  canonicalKey String
+  highestPassedStage Int @default(-1)
+  errors Int @default(0)
+  mastered Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  @@unique([userId,canonicalKey])
+}
+model ReviewSchedule {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  canonicalKey String
+  projectId String
+  intervalDays Int
+  dueAt DateTime
+  completedAt DateTime?
+  @@index([userId,dueAt])
+}
+model PointsLedger {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  eventKey String
+  canonicalKey String?
+  amount Int
+  reason String
+  createdAt DateTime @default(now())
+  @@unique([userId,eventKey])
+  @@index([userId,createdAt])
+}
+model Pet {
+  id String @id @default(uuid())
+  userId String @unique
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  species String
+  hunger Int @default(70)
+  mood Int @default(85)
+  experience Int @default(0)
+  level Int @default(1)
+  equipped Json
+}
+model PetItem {
+  id String @id
+  name String
+  kind String
+  price Int
+  effect Json
+  inventory Inventory[]
+}
+model Inventory {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  itemId String
+  item PetItem @relation(fields:[itemId],references:[id])
+  quantity Int @default(0)
+  @@unique([userId,itemId])
+}
+model LeaderboardEntry {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  weekStart DateTime
+  scope String @default("weekly")
+  groupId String @default("")
+  points Int @default(0)
+  @@unique([userId,weekStart,scope,groupId])
+}
+model ContentModerationLog {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  category String
+  action String
+  provider String
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,11 @@
+// PostgreSQL migration reference; install @prisma/client and generate client first.
+import {PrismaClient} from '@prisma/client';
+import {difficulties} from '../lib/difficulty';
+import {shop} from '../lib/db';
+const prisma = new PrismaClient();
+for (const [id, config] of Object.entries(difficulties)) {
+  const data = {cefr:id,examAliases:[],targetCount:Number(config.targets),maxSentenceWords:Number(config.maxSentenceWords),grammarComplexity:Number(config.grammarComplexity),newWordDensity:Number(config.newWordDensity),dialogueTurns:Number(config.dialogueTurns),chineseRatio:Number(config.chineseRatio),config};
+  await prisma.difficultyLevel.upsert({where:{id},create:{id,...data},update:data});
+}
+for (const item of shop) await prisma.petItem.upsert({where:{id:item.id},create:{id:item.id,name:item.name,kind:item.kind,price:item.price,effect:{}},update:{price:item.price}});
+await prisma.$disconnect();
