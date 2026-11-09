@@ -26,3 +26,13 @@
 
 ## AI 契约
 `lib/schemas.ts` 提供目标、脚本、知识、题目、审核、造句评分的 Ajv JSON Schema。每次失败最多修复一次；跨字段验证目标词确实出现在对话、目标 ID 存在、每词四阶段各一题、选项包含唯一答案。`prompts/` 为可替换模板。图片接口有本地主题插画与 RemoteImage（OpenAI-compatible PNG），双次重试后回退并标记 imageFallbacks。新生成默认不读缓存；只有 reuse:true 且非 regenerate 时读取版本化 SQLite 缓存。最近六篇对白用于防止重复。图片有容量上限的进程缓存，最终分镜随漫画持久化。返回 mode=local/remote 与 imageMode=local/remote/mixed；旧记录仍可能含 mode=mock。
+
+## 反려동물 의상 및 만화 출연
+
+- `GET /api/pet`은 기존 정보 외에 `name`, `speciesOptions`를 반환합니다. 지원 ID: `cat`, `white-cat`, `dog`, `capybara`, `sheep`, `rabbit`.
+- `POST /api/pet/select` `{species}`: 무료로 주인공 변경. 기존 인벤토리와 의상은 유지됩니다.
+- `POST /api/pet/equip` `{itemId, remove?: boolean}`: 입기/벗기. 소유권을 검사하며 head/body/face/neck/toy/background 슬롯마다 하나씩만 적용합니다. 장착은 무료입니다.
+- 의류는 중복 구매할 수 없고, 음식만 반복 구매할 수 있습니다. 가격은 서버 상품표를 사용하며 잔액·장부·인벤토리를 같은 트랜잭션에서 갱신합니다.
+- `POST /api/comics/generate`에 `characters?: [{name,role,appearance}]`를 추가할 수 있습니다(최대 2명). 실제 반려동물과 의상은 요청 본문을 신뢰하지 않고 서버 저장값에서 가져옵니다.
+- 반환 `comic.cast`는 생성 시점의 반려동물·의상·추가 인물 스냅샷입니다. 이후 옷을 바꾸어도 이전 만화는 바뀌지 않습니다. 캐시 키에 출연진을 포함합니다.
+- 로컬 분镜는 `panel.image` 배경과 `panel.cast` 캐릭터를 `ComicArtwork`에서 함께 표시합니다. 로컬 SVG 배경만 다운로드하면 반려동물 레이어는 포함되지 않습니다. AI 작화가 성공한 `artMode=remote`는 완성 이미지 자체에 등장인물을 포함합니다.
