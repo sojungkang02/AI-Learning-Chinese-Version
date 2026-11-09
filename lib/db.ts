@@ -1,3 +1,4 @@
+import {freshCare,deriveCare,type CareState} from './pet-state';
 import {shop,normalizeEquipment,speciesInfo,petSpecies} from './pet-catalog';
 export {shop} from './pet-catalog';
 import {DatabaseSync} from 'node:sqlite';
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS mastery(user_id TEXT,knowledge_id TEXT,highest INTEGE
 CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY,user_id TEXT,knowledge_id TEXT,comic_id TEXT,due TEXT,completed INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ledger(id TEXT PRIMARY KEY,user_id TEXT,event TEXT,knowledge_id TEXT,amount INTEGER,created TEXT,UNIQUE(user_id,event));
 CREATE TABLE IF NOT EXISTS pets(user_id TEXT PRIMARY KEY,species TEXT,hunger INTEGER,mood INTEGER,xp INTEGER,equipped TEXT);
+CREATE TABLE IF NOT EXISTS pet_care(user_id TEXT PRIMARY KEY,state TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inventory(user_id TEXT,item_id TEXT,quantity INTEGER,PRIMARY KEY(user_id,item_id));
 CREATE TABLE IF NOT EXISTS moderation(id TEXT PRIMARY KEY,user_id TEXT,category TEXT,rewritten INTEGER,created TEXT);
 CREATE TABLE IF NOT EXISTS favorites(user_id TEXT,knowledge_id TEXT,PRIMARY KEY(user_id,knowledge_id));
@@ -25,4 +27,8 @@ export function transaction<T>(fn:()=>T):T {db.exec('BEGIN IMMEDIATE');try{const
 export const now=()=>new Date().toISOString();
 export function ensureUser(id:string){if(!row('SELECT id FROM users WHERE id=?',id)){transaction(()=>{run('INSERT INTO users VALUES(?,?,?,?,?)',id,'星际学员'+id.slice(0,4),JSON.stringify({exam:'CET4',target:425,minutes:10,interests:'科幻',minor:true,leaderboard:true}),0,now());run('INSERT INTO pets VALUES(?,?,?,?,?,?)',id,'cat',70,85,0,'[]');run('INSERT INTO inventory VALUES(?,?,?)',id,'food',2);});}}
 export function grantPoints(userId:string,event:string,base:number,knowledgeId=''){if(row('SELECT id FROM ledger WHERE user_id=? AND event=?',userId,event))return 0;const today=now().slice(0,10);const earned=Number(row('SELECT COALESCE(SUM(amount),0) AS total FROM ledger WHERE user_id=? AND amount>0 AND created LIKE ?',userId,today+'%').total);const repeats=knowledgeId?Number(row('SELECT COUNT(*) AS n FROM ledger WHERE user_id=? AND knowledge_id=? AND amount>0',userId,knowledgeId).n):0;const amount=Math.max(0,Math.min(200-earned,Math.floor(base/(1+repeats))));run('INSERT INTO ledger VALUES(?,?,?,?,?,?)',crypto.randomUUID(),userId,event,knowledgeId,amount,now());run('UPDATE users SET balance=balance+? WHERE id=?',amount,userId);return amount;}
-export function pet(userId:string){const p=row('SELECT * FROM pets WHERE user_id=?',userId);return {...p,equipped:normalizeEquipment(JSON.parse(p.equipped)),name:speciesInfo(p.species).name,speciesOptions:petSpecies,level:Math.floor(p.xp/50)+1,balance:row('SELECT balance FROM users WHERE id=?',userId).balance,inventory:rows('SELECT item_id,quantity FROM inventory WHERE user_id=?',userId),shop};}
+export function readCare(userId:string):CareState {run('INSERT OR IGNORE INTO pet_care VALUES(?,?)',userId,JSON.stringify(freshCare(now())));return JSON.parse(row('SELECT state FROM pet_care WHERE user_id=?',userId).state);}
+export function saveCare(userId:string,state:CareState){run('INSERT INTO pet_care VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET state=excluded.state',userId,JSON.stringify(state));}
+function readPet(userId:string){const p=row('SELECT * FROM pets WHERE user_id=?',userId);const current=now(),care=deriveCare(readCare(userId),current);saveCare(userId,{lastSeen:current,lastInteraction:care.lastInteraction,lastCleaned:care.lastCleaned,cleanliness:care.cleanliness,affection:care.affection,interactions:care.interactions,reaction:care.reaction,reactionUntil:care.reactionUntil});return {...p,equipped:normalizeEquipment(JSON.parse(p.equipped)).filter(id=>{const item=shop.find(i=>i.id===id);return !item?.species||item.species===p.species;}),name:speciesInfo(p.species).name,speciesOptions:petSpecies,level:Math.floor(p.xp/50)+1,balance:row('SELECT balance FROM users WHERE id=?',userId).balance,inventory:rows('SELECT item_id,quantity FROM inventory WHERE user_id=?',userId),shop,care};}
+
+export function pet(userId:string):ReturnType<typeof readPet>{return db.isTransaction?readPet(userId):transaction(()=>readPet(userId));}

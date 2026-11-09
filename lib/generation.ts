@@ -1,11 +1,12 @@
+import {scenePetState,type PetSceneState,type PetEmotion,type PetAction} from './pet-state';
 import {createHash,randomInt} from 'node:crypto';
 import {resolveDifficulty} from './difficulty';
 import {MockLLM,RemoteLLM,MockImage,RemoteImage,structured,type ImageProvider} from './providers';
 import {describeCast,petSpecies,type StoryCast} from './pet-catalog';
 import {findTopic,topics,type WordEntry} from './story-topics';
-export const GENERATION_VERSION='pet-cast-stories-v3';
+export const GENERATION_VERSION='expressive-companions-v4';
 export type Knowledge={id:string;word:string;meaning:string;ipa:string;example:string;context:string;collocations:string[]};
-export type Panel={id:string;scene:string;dialogue:string;chinese:string;targets:string[];image?:string;cast?:StoryCast;artMode?:string};
+export type Panel={id:string;scene:string;dialogue:string;chinese:string;targets:string[];image?:string;cast?:StoryCast;artMode?:string;emotion?:PetEmotion;action?:PetAction;petState?:PetSceneState};
 export type Question={knowledgeId:string;stage:number;type:string;prompt:string;answer:string;options:string[]};
 export type Comic={id:string;title:string;characters:string[];panels:Panel[];knowledge:Knowledge[];questions:Question[];mode:string;goals:string[];moderated:boolean;difficulty:string;imageMode?:string;generationVersion?:string;topic?:string;idea?:string;imageFallbacks?:number;genre?:string;style?:string;cast?:StoryCast};
 export type GenerateInput={difficulty:string;genre:string;style:string;idea:string;lowCost?:boolean;cast?:StoryCast};
@@ -22,7 +23,7 @@ export function createLocalStory(input:GenerateInput,variation:number){
  const knowledge:Knowledge[]=selected.map((w,i)=>({id:'word-'+w.word,word:w.word,meaning:w.meaning,ipa:w.ipa,example:w.examples[(variation+i)%w.examples.length].replace(/Pip/g,input.cast?.additional[0]?.name||input.cast?.pet.name||'Pip'),context:'',collocations:[w.collocation]}));
  const panels:Panel[]=Array.from({length:6},(_,i)=>{
   const ks=knowledge.filter((_,j)=>j%6===i);const speaker=input.cast?(i%2===1&&input.cast.additional.length?input.cast.additional[(i>>1)%input.cast.additional.length].name:input.cast.pet.name):'';const storyLine=input.cast&&topic.id==='space'&&arc===0?['Welcome to our Mars school!','Our class map has gone missing.','Look! Paper marks lead outside.','We need a safe way across.','There is the map beside the greenhouse!','We are home before the final bell.'][i]:topic.arcs[arc][i];const lead=(speaker?speaker+': ':'')+storyLine;
-  return {id:'panel-'+i,scene:`${topic.label}: ${topic.setting}. Story beat ${i+1}: ${topic.hints[arc][i]}. Action: ${lead} ${ks.map(k=>k.example).join(' ')} Camera: ${['wide establishing view','medium reaction shot','close-up discovery','over-the-shoulder planning','dynamic action shot','wide celebratory ending'][i]}. ${input.cast?describeCast(input.cast).join(' '):'Mia and Pip remain consistent.'}`,dialogue:[lead,...ks.map(k=>k.example)].join(' '),chinese:`${topic.hints[arc][i]}。${ks.map(k=>`${k.word}：${k.meaning}`).join('；')}`,targets:ks.map(k=>k.id)};
+  return {id:'panel-'+i,...scenePetState(lead,i),scene:`${topic.label}: ${topic.setting}. Story beat ${i+1}: ${topic.hints[arc][i]}. Action: ${lead} ${ks.map(k=>k.example).join(' ')} Camera: ${['wide establishing view','medium reaction shot','close-up discovery','over-the-shoulder planning','dynamic action shot','wide celebratory ending'][i]}. ${input.cast?describeCast(input.cast).join(' '):'Mia and Pip remain consistent.'}`,dialogue:[lead,...ks.map(k=>k.example)].join(' '),chinese:`${topic.hints[arc][i]}。${ks.map(k=>`${k.word}：${k.meaning}`).join('；')}`,targets:ks.map(k=>k.id)};
  });
  knowledge.forEach(k=>{k.context=panels.find(p=>p.targets.includes(k.id))!.dialogue;});
  const questions:Question[]=knowledge.flatMap((k,i)=>[3,2,1,0].map(stage=>{
@@ -63,7 +64,7 @@ export async function generateComic(input:GenerateInput,options:GenerationOption
  const images:ImageProvider=wantsRemoteImages?new RemoteImage():new MockImage();let imageFallbacks=0;
  // Bounded concurrency avoids holding six image requests at once on a small demo instance.
  for(let offset=0;offset<script.panels.length;offset+=2){await Promise.all(script.panels.slice(offset,offset+2).map(async(p,j)=>{
-  const i=offset+j;const imageContext={idea:safeInput.idea,genre:input.genre,characters:script.characters,variation,theme:useRemote?undefined:local.topic.id,cast:input.cast};
+  const i=offset+j;const derived=scenePetState(p.dialogue,i);p.petState={emotion:p.emotion||derived.emotion,action:p.action||derived.action};p.scene+=` Pet expression: ${p.petState.emotion}; pet action: ${p.petState.action}.`;const imageContext={idea:safeInput.idea,genre:input.genre,characters:script.characters,variation,theme:useRemote?undefined:local.topic.id,cast:input.cast,petState:p.petState};
   const key=createHash('sha256').update(JSON.stringify({scene:p.scene,style:input.style,provider:wantsRemoteImages?'remote':'local',characters:script.characters,variation})).digest('hex');
   let src=imageCache.get(key);for(let attempt=0;!src&&attempt<2;attempt++){try{src=await images.generate(p.scene,i,input.style,imageContext);}catch{}}
   if(!src){imageFallbacks++;src=await new MockImage().generate(p.scene,i,input.style,imageContext);}p.image=src;p.cast=input.cast;p.artMode=src.startsWith('data:image/png')?'remote':'local';

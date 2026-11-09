@@ -15,6 +15,7 @@ model User {
   createdAt DateTime @default(now())
   profile LearnerProfile?
   pet Pet?
+  petCare PetCare?
   projects ComicProject[]
   sessions QuizSession[]
   mastery MasteryRecord[]
@@ -199,4 +200,17 @@ model ContentModerationLog {
   action String
   provider String
   createdAt DateTime @default(now())
+}
+
+model PetCare {
+  userId String @id
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  lastSeen DateTime @default(now())
+  lastInteraction DateTime?
+  lastCleaned DateTime @default(now())
+  cleanliness Int @default(100)
+  affection Int @default(0)
+  interactions Int @default(0)
+  reaction String @default("neutral")
+  reactionUntil DateTime?
 }

@@ -36,3 +36,15 @@
 - `POST /api/comics/generate`에 `characters?: [{name,role,appearance}]`를 추가할 수 있습니다(최대 2명). 실제 반려동물과 의상은 요청 본문을 신뢰하지 않고 서버 저장값에서 가져옵니다.
 - 반환 `comic.cast`는 생성 시점의 반려동물·의상·추가 인물 스냅샷입니다. 이후 옷을 바꾸어도 이전 만화는 바뀌지 않습니다. 캐시 키에 출연진을 포함합니다.
 - 로컬 분镜는 `panel.image` 배경과 `panel.cast` 캐릭터를 `ComicArtwork`에서 함께 표시합니다. 로컬 SVG 배경만 다운로드하면 반려동물 레이어는 포함되지 않습니다. AI 작화가 성공한 `artMode=remote`는 완성 이미지 자체에 등장인물을 포함합니다.
+
+## 돌봄과 표정 API
+
+`POST /api/pet/interact`는 `{action:"pet"|"play"|"clean"}`을 받고 갱신된 pet을 반환합니다. 세션 소유자만 변경하며 포인트·XP는 지급하지 않습니다. 클라이언트가 날짜, 경과 시간, 친밀도, 청결도를 지정할 수 없습니다. 먹이는 기존 `/api/pet/feed`로만 소비하고, 학습 보상 경로에서 서버가 별도로 study 반응을 기록합니다.
+
+`GET /api/pet` 및 세션의 `pet.care`에는 `cleanliness`, `dirt`, `affection`, `interactions`, `emotion`, `action`, `needsBath`, `lastSeen`, `lastCleaned`, `lastInteraction`, `reactionUntil`이 포함됩니다. GET은 현재 방문을 기록합니다. 반응 만료와 미접속 반영 규칙은 README와 `lib/pet-state.ts`를 참조하세요.
+
+분镜의 `emotion`/`action`은 AI 출력 JSON Schema의 열거형으로 검증하고, 누락 시 대사와 이야기 단계에서 추론합니다. 최종 `petState`는 생성 시점의 스냅샷입니다. 장면 감정은 홈 화면의 실제 친밀도·청결도를 변경하지 않습니다.
+
+## 자연스럽게 입은 전용 코디
+
+`PetItem.look`은 완성형 착용 스프라이트의 열 번호, `species`는 착용 가능한 동물, `occupies`는 함께 점유하는 슬롯입니다. 6개 세트는 각각 head/body/neck을 점유하고 같은 동물만 구매·착용할 수 있습니다. 구매는 기존처럼 서버 가격으로 처리합니다. `normalizeEquipment`는 복수 슬롯 간 충돌도 처리합니다. `PetAvatar`의 `data-full-look`으로 현재 세트를 식별할 수 있고, 감정이 바뀌어도 세트를 유지한 채 대응하는 이미지 행으로 바뀝니다. 세트 포함 모자와 의상은 개별로 분리하지 않고 함께 착탈합니다.

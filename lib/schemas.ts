@@ -1,8 +1,9 @@
+import {petEmotions,petActions} from './pet-state';
 import Ajv from 'ajv';
 const ajv=new Ajv({allErrors:true});
 const str={type:'string',minLength:1};
 export const knowledgeSchema={type:'object',additionalProperties:false,required:['id','word','meaning','ipa','example','context','collocations'],properties:{id:str,word:str,meaning:str,ipa:str,example:str,context:str,collocations:{type:'array',minItems:1,items:str}}};
-export const panelSchema={type:'object',additionalProperties:false,required:['id','scene','dialogue','chinese','targets'],properties:{id:str,scene:str,dialogue:str,chinese:str,targets:{type:'array',items:str}}};
+export const panelSchema={type:'object',additionalProperties:false,required:['id','scene','dialogue','chinese','targets'],properties:{id:str,scene:str,dialogue:str,chinese:str,emotion:{enum:[...petEmotions]},action:{enum:[...petActions]},targets:{type:'array',items:str}}};
 export const goalSchema={type:'object',additionalProperties:false,required:['goals'],properties:{goals:{type:'array',minItems:5,maxItems:10,items:str}}};
 export const scriptSchema={type:'object',additionalProperties:false,required:['title','characters','panels'],properties:{title:str,characters:{type:'array',minItems:1,items:str},panels:{type:'array',minItems:6,maxItems:10,items:panelSchema}}};
 export const extractionSchema={type:'object',additionalProperties:false,required:['knowledge'],properties:{knowledge:{type:'array',minItems:5,maxItems:10,items:knowledgeSchema}}};
