@@ -48,3 +48,7 @@
 ## 자연스럽게 입은 전용 코디
 
 `PetItem.look`은 완성형 착용 스프라이트의 열 번호, `species`는 착용 가능한 동물, `occupies`는 함께 점유하는 슬롯입니다. 6개 세트는 각각 head/body/neck을 점유하고 같은 동물만 구매·착용할 수 있습니다. 구매는 기존처럼 서버 가격으로 처리합니다. `normalizeEquipment`는 복수 슬롯 간 충돌도 처리합니다. `PetAvatar`의 `data-full-look`으로 현재 세트를 식별할 수 있고, 감정이 바뀌어도 세트를 유지한 채 대응하는 이미지 행으로 바뀝니다. 세트 포함 모자와 의상은 개별로 분리하지 않고 함께 착탈합니다.
+
+## 기존 단품 외관 업그레이드
+
+서버의 기존 상품 ID·가격·슬롯은 변경하지 않습니다. `hat`, `beret`, `crown`, `sweater`, `overalls`는 클라이언트의 `fittedItemLook`에서 완성형 착용 이미지로 해석합니다. 데이터 마이그레이션이나 포인트 차감이 없습니다. `data-render-look`은 `hat-none`, `none-sweater`, `hat-sweater` 등 실제 착용 조합을 나타냅니다. `/api/health`는 공개 릴리스 식별자와 Render가 제공하는 커밋의 앞 7자를 반환하며, 이는 GitHub 업로드와 실제 배포를 구분하기 위한 확인 정보입니다.

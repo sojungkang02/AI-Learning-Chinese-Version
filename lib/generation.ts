@@ -4,7 +4,7 @@ import {resolveDifficulty} from './difficulty';
 import {MockLLM,RemoteLLM,MockImage,RemoteImage,structured,type ImageProvider} from './providers';
 import {describeCast,petSpecies,type StoryCast} from './pet-catalog';
 import {findTopic,topics,type WordEntry} from './story-topics';
-export const GENERATION_VERSION='expressive-companions-v4';
+export const GENERATION_VERSION='fitted-companions-v5';
 export type Knowledge={id:string;word:string;meaning:string;ipa:string;example:string;context:string;collocations:string[]};
 export type Panel={id:string;scene:string;dialogue:string;chinese:string;targets:string[];image?:string;cast?:StoryCast;artMode?:string;emotion?:PetEmotion;action?:PetAction;petState?:PetSceneState};
 export type Question={knowledgeId:string;stage:number;type:string;prompt:string;answer:string;options:string[]};

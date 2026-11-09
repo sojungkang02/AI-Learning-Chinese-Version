@@ -5,7 +5,7 @@ export const dynamic='force-dynamic';
 export function GET(){
   try {
     row('SELECT 1 AS healthy');
-    return NextResponse.json({status:'ok',release:'natural-outfits-preview-v1',commit:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local'},{headers:{'Cache-Control':'no-store'}});
+    return NextResponse.json({status:'ok',release:'natural-legacy-items-v2',commit:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local'},{headers:{'Cache-Control':'no-store'}});
   } catch {
     return NextResponse.json({status:'unavailable'},{status:503});
   }
