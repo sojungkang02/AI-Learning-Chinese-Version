@@ -5,7 +5,7 @@
 |---|---|---|
 | GET /api/session | — | id,nickname,profile,balance,comics,pet |
 | POST /api/profile | nickname,exam,target,minutes,interests,species,leaderboard | ok |
-| POST /api/comics/generate | difficulty,genre,style,idea,regenerate? | comic（不含答案）,cached |
+| POST /api/comics/generate | difficulty,genre,style,idea,regenerate?,reuse? | comic（不含答案）,cached |
 | GET /api/comics/:id | — | comic |
 | POST /api/points/claim | comicId | awarded,balance?；仅阅读奖励，幂等 |
 | POST /api/quiz/start | comicId | id,revision,stage,index,total,question,support |
@@ -25,4 +25,4 @@
 `stage=3`：support 含 meaning/example/panel；`2`：example/panel；`1`：panel；`0`：空对象。L0 不向浏览器传漫画、例句、释义或标准答案。Comic GET 也不含 questions。正确：3→2→1→0→下一知识点；错误：min(3,stage+1)。revision 乐观并发校验防止重复答题奖励。最高通过阶段用顺序值 1–4 表示 L3–L0，-1 表示未通过。
 
 ## AI 契约
-`lib/schemas.ts` 提供目标、脚本、知识、题目、审核、造句评分的 Ajv JSON Schema。每次失败最多修复一次；跨字段验证目标词确实出现在对话、目标 ID 存在、每词四阶段各一题、选项包含唯一答案。`prompts/` 为可替换模板。图片接口目前只有 MockImage，双次重试与 SVG 回退；生成漫画 SQLite 持久缓存，进程内图片缓存。
+`lib/schemas.ts` 提供目标、脚本、知识、题目、审核、造句评分的 Ajv JSON Schema。每次失败最多修复一次；跨字段验证目标词确实出现在对话、目标 ID 存在、每词四阶段各一题、选项包含唯一答案。`prompts/` 为可替换模板。图片接口有本地主题插画与 RemoteImage（OpenAI-compatible PNG），双次重试后回退并标记 imageFallbacks。新生成默认不读缓存；只有 reuse:true 且非 regenerate 时读取版本化 SQLite 缓存。最近六篇对白用于防止重复。图片有容量上限的进程缓存，最终分镜随漫画持久化。返回 mode=local/remote 与 imageMode=local/remote/mixed；旧记录仍可能含 mode=mock。

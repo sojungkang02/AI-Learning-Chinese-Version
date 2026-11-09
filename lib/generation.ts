@@ -1,29 +1,71 @@
-import {createHash} from 'node:crypto';
+import {createHash,randomInt} from 'node:crypto';
 import {resolveDifficulty} from './difficulty';
-import {MockLLM,RemoteLLM,MockImage,structured} from './providers';
+import {MockLLM,RemoteLLM,MockImage,RemoteImage,structured,type ImageProvider} from './providers';
+import {findTopic,topics,type WordEntry} from './story-topics';
+export const GENERATION_VERSION='themed-stories-v2';
 export type Knowledge={id:string;word:string;meaning:string;ipa:string;example:string;context:string;collocations:string[]};
 export type Panel={id:string;scene:string;dialogue:string;chinese:string;targets:string[];image?:string};
 export type Question={knowledgeId:string;stage:number;type:string;prompt:string;answer:string;options:string[]};
-export type Comic={id:string;title:string;characters:string[];panels:Panel[];knowledge:Knowledge[];questions:Question[];mode:string;goals:string[];moderated:boolean;difficulty:string};
+export type Comic={id:string;title:string;characters:string[];panels:Panel[];knowledge:Knowledge[];questions:Question[];mode:string;goals:string[];moderated:boolean;difficulty:string;imageMode?:string;generationVersion?:string;topic?:string;idea?:string;imageFallbacks?:number;genre?:string;style?:string};
 export type GenerateInput={difficulty:string;genre:string;style:string;idea:string;lowCost?:boolean};
-const vocab=[['environment','环境','/ɪnˈvaɪrənmənt/','We protect the environment.','protect the environment'],['explore','探索','/ɪkˈsplɔːr/','We explore the planet.','explore the planet'],['discover','发现','/dɪˈskʌvər/','We discover a garden.','discover a garden'],['resource','资源','/rɪˈsɔːrs/','Water is a valuable resource.','valuable resource'],['protect','保护','/prəˈtekt/','We protect our home.','protect our home'],['sustainable','可持续的','/səˈsteɪnəbl/','Our school uses sustainable energy.','sustainable energy'],['adapt','适应','/əˈdæpt/','We adapt to change.','adapt to change'],['conserve','节约','/kənˈsɜːrv/','We conserve water.','conserve water'],['biodiversity','生物多样性','/ˌbaɪoʊdaɪˈvɜːrsəti/','We study biodiversity.','study biodiversity'],['resilience','韧性','/rɪˈzɪliəns/','Nature shows resilience.','shows resilience']];
-const themes:Record<string,string>={'校园':'the school','科幻':'Mars School','悬疑':'the secret garden','职场':'the office','旅行':'the island','日常':'our town'};
-export function localModeration(text:string){const unsafe=/色情|裸照|自杀|自残|杀死|炸弹|毒品|仇恨|身份证|手机号|rape|porn|suicide|kill|bomb|\b\d{11}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text);return {safe:!unsafe,reason:unsafe?'minor-safety-or-privacy':'',rewritten:unsafe?'在学校开展保护环境的友好探索':text};}
-export function requestKey(input:GenerateInput){return createHash('sha256').update(JSON.stringify(input)).digest('hex');}
-function mockData(input:GenerateInput){const level=resolveDifficulty(input.difficulty);const count=Number(level.targets);const place=themes[input.genre]||'Mars School';const knowledge:Knowledge[]=vocab.slice(0,count).map((v,i)=>({id:'env-'+i,word:v[0],meaning:v[1],ipa:v[2],example:v[3],context:v[3],collocations:[v[4]]}));const panels:Panel[]=Array.from({length:6},(_,i)=>{const ks=knowledge.filter((_,j)=>j%6===i);return {id:'panel-'+i,scene:`Mia and her robot Pip explore ${place}, scene ${i+1}: ${['arrival','a curious discovery','working together','a small challenge','a green solution','celebrating friendship'][i]}. Style ${input.style}. Inspired by: ${input.idea.slice(0,160)}`,dialogue:ks.length?ks.map(k=>k.example).join(' '):`Let us work together at ${place}.`,chinese:ks.length?ks.map(k=>`${k.word}：${k.meaning}`).join('；'):'一起行动，让世界更美好。',targets:ks.map(k=>k.id)};});knowledge.forEach(k=>{k.context=panels.find(p=>p.targets.includes(k.id))!.dialogue;});const questions:Question[]=knowledge.flatMap((k,i)=>[3,2,1,0].map(stage=>({knowledgeId:k.id,stage,type:stage===3?'meaning':stage===2?'cloze':stage===1?'collocation':i%2?'sentence':'usage',prompt:stage===3?`“${k.word}” 在漫画中的含义是什么？`:stage===2?k.example.replace(new RegExp(k.word,'ig'),'_____'):stage===1?`选择与 “${k.word}” 搭配正确的短语`:(i%2?`用 “${k.word}” 写一个完整的英语句子。`:`选择 “${k.word}” 的正确用法。`),answer:stage===3?k.meaning:stage===2?k.word:stage===1?k.collocations[0]:k.example,options:stage===3?[k.meaning,...knowledge.filter(x=>x.id!==k.id).slice(0,3).map(x=>x.meaning)]:stage===2?[k.word,...knowledge.filter(x=>x.id!==k.id).slice(0,3).map(x=>x.word)]:stage===1?[k.collocations[0],`quickly ${k.word} blue`,`${k.word} yesterday happy`,`very the ${k.word}`]:i%2?[]:[k.example,`She ${k.word} yesterday is.`,`They is ${k.word}.`,`A ${k.word} are go.`]})));return {knowledge,panels,questions,characters:['Mia: curious student, dark bob hair, cream explorer suit','Pip: friendly yellow cube robot'],title:`${input.genre}奇遇记 · A Greener Tomorrow`,goals:knowledge.map(k=>`掌握 ${k.word} 的含义与语境用法`)};}
+export type GenerationOptions={variation?:number;recentDialogues?:string[]};
+let sequence=randomInt(1000000);
+export function localModeration(text:string){const unsafe=/色情|裸照|自杀|自残|杀死|炸弹|毒品|仇恨|身份证|手机号|\b(?:rape|porn|suicide|kill|bomb)\b|\b\d{11}\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text);return {safe:!unsafe,reason:unsafe?'minor-safety-or-privacy':'',rewritten:unsafe?'在学校开展保护环境的友好探索':text};}
+export function requestKey(input:GenerateInput){return createHash('sha256').update(JSON.stringify({version:GENERATION_VERSION,...input})).digest('hex');}
+function shuffled<T>(items:T[],seed:number){const copy=[...items];let n=(seed>>>0)||1;for(let i=copy.length-1;i>0;i--){n=(Math.imul(n,1664525)+1013904223)>>>0;const j=n%(i+1);[copy[i],copy[j]]=[copy[j],copy[i]];}return copy;}
+export function createLocalStory(input:GenerateInput,variation:number){
+ const level=resolveDifficulty(input.difficulty),topic=findTopic(input.idea,input.genre),arc=variation%topic.arcs.length;
+ const allWords=[...new Map(topics.flatMap(t=>t.words).map(w=>[w.word,w])).values()];
+ const explicit=allWords.filter(w=>new RegExp('\\b'+w.word+'\\b','i').test(input.idea));
+ const selected=[...new Map([...explicit,...shuffled(topic.words,variation+1)].map(w=>[w.word,w])).values()].slice(0,Number(level.targets));
+ const knowledge:Knowledge[]=selected.map((w,i)=>({id:'word-'+w.word,word:w.word,meaning:w.meaning,ipa:w.ipa,example:w.examples[(variation+i)%w.examples.length],context:'',collocations:[w.collocation]}));
+ const panels:Panel[]=Array.from({length:6},(_,i)=>{
+  const ks=knowledge.filter((_,j)=>j%6===i);const lead=topic.arcs[arc][i];
+  return {id:'panel-'+i,scene:`${topic.label}: ${topic.setting}. Story beat ${i+1}: ${topic.hints[arc][i]}. Action: ${lead} ${ks.map(k=>k.example).join(' ')} Camera: ${['wide establishing view','medium reaction shot','close-up discovery','over-the-shoulder planning','dynamic action shot','wide celebratory ending'][i]}. Mia and Pip remain consistent.`,dialogue:[lead,...ks.map(k=>k.example)].join(' '),chinese:`${topic.hints[arc][i]}。${ks.map(k=>`${k.word}：${k.meaning}`).join('；')}`,targets:ks.map(k=>k.id)};
+ });
+ knowledge.forEach(k=>{k.context=panels.find(p=>p.targets.includes(k.id))!.dialogue;});
+ const questions:Question[]=knowledge.flatMap((k,i)=>[3,2,1,0].map(stage=>{
+  const type=stage===3?'meaning':stage===2?'cloze':stage===1?'collocation':i%2?'sentence':'usage';
+  return {knowledgeId:k.id,stage,type,prompt:stage===3?`“${k.word}” 在漫画中的含义是什么？`:stage===2?k.example.replace(new RegExp('\\b'+k.word+'\\b','ig'),'_____'):stage===1?`选择与 “${k.word}” 搭配正确的短语`:i%2?`用 “${k.word}” 写一个完整的英语句子。`:`选择 “${k.word}” 的正确用法。`,answer:stage===3?k.meaning:stage===2?k.word:stage===1?k.collocations[0]:k.example,options:stage===3?[k.meaning,...knowledge.filter(x=>x.id!==k.id).slice(0,3).map(x=>x.meaning)]:stage===2?[k.word,...knowledge.filter(x=>x.id!==k.id).slice(0,3).map(x=>x.word)]:stage===1?[k.collocations[0],...knowledge.filter(x=>x.id!==k.id).slice(0,3).map(x=>x.collocations[0])]:i%2?[]:[k.example,`She ${k.word} yesterday is.`,`They is ${k.word}.`,`A ${k.word} are go.`]};
+ }));
+ return {knowledge,panels,questions,characters:['Mia: curious student, dark bob hair, warm skin, mustard jacket and navy trousers; cream spacesuit in space or underwater','Pip: friendly small yellow cube robot, dark teal face screen, two mint eyes, short articulated arms'],title:`${topic.title} · ${topic.hints[arc][0]}`,goals:knowledge.map(k=>`在${topic.label}故事中掌握 ${k.word} 的含义与用法`),topic};
+}
 const imageCache=new Map<string,string>();
-export async function generateComic(input:GenerateInput):Promise<Comic>{resolveDifficulty(input.difficulty);const moderation=localModeration(input.idea);const safeInput={...input,idea:moderation.rewritten};const provider=process.env.LLM_PROVIDER==='remote'&&process.env.LLM_API_KEY?new RemoteLLM():new MockLLM();const mock=mockData(safeInput);const context={request:safeInput,difficulty:resolveDifficulty(input.difficulty)};const remote=provider instanceof RemoteLLM;
- const audit=await structured<{safe:boolean;reason:string;rewritten:string}>(provider,'moderation',remote?context:moderation);
- if(!audit.safe)safeInput.idea=audit.rewritten||'友好的校园环保冒险';
+export async function generateComic(input:GenerateInput,options:GenerationOptions={}):Promise<Comic>{
+ resolveDifficulty(input.difficulty);
+ const moderation=localModeration(input.idea);const safeInput={...input,idea:moderation.rewritten};
+ const useRemote=process.env.LLM_PROVIDER==='remote';
+ if(useRemote&&!process.env.LLM_API_KEY)throw new Error('请在服务器环境变量中设置 LLM_API_KEY，或使用本地主题模式');
+ const provider=useRemote?new RemoteLLM():new MockLLM();
+ let variation=options.variation??++sequence;
+ let local=createLocalStory(safeInput,variation);
+ // Also avoid repeats across server restarts, using recent user-visible dialogue.
+ for(let attempt=0;attempt<12&&options.recentDialogues?.includes(local.panels.map(p=>p.dialogue).join('\n'));attempt++)local=createLocalStory(safeInput,++variation);
+ const context={request:safeInput,difficulty:resolveDifficulty(input.difficulty),variation,avoidRepeating:options.recentDialogues?.slice(0,3)||[]};
+ const audit=await structured<{safe:boolean;reason:string;rewritten:string}>(provider,'moderation',useRemote?context:moderation);
+ if(!audit.safe){safeInput.idea=audit.rewritten||'友好的校园冒险';local=createLocalStory(safeInput,variation);}
  const safeContext={...context,request:safeInput};
- const goals=await structured<{goals:string[]}>(provider,'goals',remote?safeContext:{goals:mock.goals});
- const script=await structured<{title:string;characters:string[];panels:Panel[]}>(provider,'script',remote?{...safeContext,goals}: {title:mock.title,characters:mock.characters,panels:mock.panels});
+ const goals=await structured<{goals:string[]}>(provider,'goals',useRemote?safeContext:{goals:local.goals});
+ const script=await structured<{title:string;characters:string[];panels:Panel[]}>(provider,'script',useRemote?{...safeContext,goals}:{title:local.title,characters:local.characters,panels:local.panels});
  if(script.panels.length!==6)throw new Error('MVP 必须生成六个分镜');
- const extracted=await structured<{knowledge:Knowledge[]}>(provider,'knowledge',remote?{...safeContext,script,goals}:{knowledge:mock.knowledge});
- const quiz=await structured<{questions:Question[]}>(provider,'quiz',remote?{...safeContext,script,knowledge:extracted.knowledge}:{questions:mock.questions});
+ const extracted=await structured<{knowledge:Knowledge[]}>(provider,'knowledge',useRemote?{...safeContext,script,goals}:{knowledge:local.knowledge});
+ const quiz=await structured<{questions:Question[]}>(provider,'quiz',useRemote?{...safeContext,script,knowledge:extracted.knowledge}:{questions:local.questions});
  const ids=new Set(extracted.knowledge.map(k=>k.id));if(ids.size!==extracted.knowledge.length)throw new Error('知识点 ID 重复');
  for(const k of extracted.knowledge){if(!script.panels.some(p=>p.dialogue.toLowerCase().includes(k.word.toLowerCase())&&p.targets.includes(k.id)))throw new Error('目标词未出现在漫画对话中');for(const stage of [3,2,1,0]){const qs=quiz.questions.filter(q=>q.knowledgeId===k.id&&q.stage===stage);if(qs.length!==1)throw new Error('四阶段题目不完整');const q=qs[0];if(q.type!=='sentence'&&(!q.options.includes(q.answer)||new Set(q.options).size!==q.options.length))throw new Error('测验选项无效');}}
  if(script.panels.some(p=>p.targets.some(id=>!ids.has(id)))||quiz.questions.some(q=>!ids.has(q.knowledgeId)))throw new Error('未知知识点引用');
- const outputText=JSON.stringify({script,knowledge:extracted,quiz});if(!localModeration(outputText).safe)throw new Error('生成内容未通过安全审核，请更换设想重试');
- const images=new MockImage();for(let i=0;i<script.panels.length;i++){const p=script.panels[i];const key=requestKey({...safeInput,idea:p.scene});let src=imageCache.get(key);for(let attempt=0;!src&&attempt<2;attempt++){try{src=await images.generate(p.scene,i,input.style);}catch{}}p.image=src||await images.generate('safe placeholder',i,'简笔');imageCache.set(key,p.image);}
- return {id:crypto.randomUUID(),...script,knowledge:extracted.knowledge,questions:quiz.questions,goals:goals.goals,mode:remote?'remote':'mock',moderated:!moderation.safe||!audit.safe,difficulty:input.difficulty};}
+ if(!localModeration(JSON.stringify({script,knowledge:extracted,quiz})).safe)throw new Error('生成内容未通过安全审核，请更换设想重试');
+ if(options.recentDialogues?.includes(script.panels.map(p=>p.dialogue).join('\n')))throw new Error('生成内容与最近的故事重复，请重新生成');
+ const wantsRemoteImages=process.env.IMAGE_PROVIDER==='remote'&&!input.lowCost;
+ if(wantsRemoteImages&&!process.env.IMAGE_API_KEY&&!process.env.LLM_API_KEY)throw new Error('请在服务器环境变量中设置 IMAGE_API_KEY 后启用 AI 作画');
+ const images:ImageProvider=wantsRemoteImages?new RemoteImage():new MockImage();let imageFallbacks=0;
+ // Bounded concurrency avoids holding six image requests at once on a small demo instance.
+ for(let offset=0;offset<script.panels.length;offset+=2){await Promise.all(script.panels.slice(offset,offset+2).map(async(p,j)=>{
+  const i=offset+j;const imageContext={idea:safeInput.idea,genre:input.genre,characters:script.characters,variation,theme:useRemote?undefined:local.topic.id};
+  const key=createHash('sha256').update(JSON.stringify({scene:p.scene,style:input.style,provider:wantsRemoteImages?'remote':'local',characters:script.characters,variation})).digest('hex');
+  let src=imageCache.get(key);for(let attempt=0;!src&&attempt<2;attempt++){try{src=await images.generate(p.scene,i,input.style,imageContext);}catch{}}
+  if(!src){imageFallbacks++;src=await new MockImage().generate(p.scene,i,input.style,imageContext);}p.image=src;
+  // Bounded cache; comics themselves remain persisted in SQLite.
+  if(imageCache.size>=72)imageCache.delete(imageCache.keys().next().value!);imageCache.set(key,src);
+ }));}
+ return {id:crypto.randomUUID(),...script,knowledge:extracted.knowledge,questions:quiz.questions,goals:goals.goals,mode:useRemote?'remote':'local',moderated:!moderation.safe||!audit.safe,difficulty:input.difficulty,imageMode:wantsRemoteImages?(imageFallbacks?'mixed':'remote'):'local',imageFallbacks,generationVersion:GENERATION_VERSION,topic:local.topic.label,idea:safeInput.idea,genre:input.genre,style:input.style};
+}
